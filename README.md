@@ -15,7 +15,7 @@ A Model Context Protocol (MCP) server that enables AI assistants like Claude and
 - ✅ **Multiple Photoshop Versions**: Supports Photoshop 2012-2025+
 - ✅ **ExtendScript API**: Universal compatibility via AppleScript/COM automation
 - ✅ **Auto-Detection**: Automatically finds Photoshop installation on your system
-- ✅ **42+ Tools**: Comprehensive Photoshop automation
+- ✅ **50+ Tools**: Comprehensive Photoshop automation
 - ✅ **Document Management**: Create, open, save, close, crop documents
 - ✅ **Layer Operations**: Create, delete, duplicate, merge, transform layers
 - ✅ **Layer Properties**: Opacity, blend modes, visibility, locking
