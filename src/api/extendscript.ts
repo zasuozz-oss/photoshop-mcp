@@ -12,6 +12,58 @@ function sTID(s) { return app.stringIDToTypeID(s); }
 `;
 
 /**
+ * Helper function to get current context information
+ */
+const getContextInfo = `
+function getContextInfo() {
+  var context = {
+    hasDocument: app.documents.length > 0
+  };
+  
+  if (context.hasDocument) {
+    var doc = app.activeDocument;
+    context.document = {
+      name: doc.name,
+      width: doc.width.as('px'),
+      height: doc.height.as('px'),
+      resolution: doc.resolution,
+      colorMode: String(doc.mode),
+      layerCount: doc.layers.length,
+      hasSelection: doc.selection.bounds ? true : false
+    };
+    
+    if (doc.activeLayer) {
+      var layer = doc.activeLayer;
+      context.activeLayer = {
+        name: layer.name,
+        kind: String(layer.kind),
+        opacity: layer.opacity,
+        blendMode: String(layer.blendMode),
+        visible: layer.visible,
+        locked: layer.allLocked,
+        isBackground: layer.isBackgroundLayer
+      };
+      
+      // Add bounds if available
+      try {
+        var bounds = layer.bounds;
+        context.activeLayer.bounds = {
+          left: bounds[0].as('px'),
+          top: bounds[1].as('px'),
+          right: bounds[2].as('px'),
+          bottom: bounds[3].as('px')
+        };
+      } catch (e) {
+        // Bounds not available for some layer types
+      }
+    }
+  }
+  
+  return context;
+}
+`;
+
+/**
  * Common ExtendScript snippets
  */
 export const ExtendScriptSnippets = {
@@ -44,24 +96,22 @@ export const ExtendScriptSnippets = {
    * Get active document info
    */
   getDocumentInfo: () => `
+    ${getContextInfo}
+    
     if (app.documents.length === 0) {
       throw new Error('No active document');
     }
-    var doc = app.activeDocument;
-    return {
-      name: doc.name,
-      width: doc.width.as('px'),
-      height: doc.height.as('px'),
-      resolution: doc.resolution,
-      colorMode: doc.mode,
-      layers: doc.layers.length
-    };
+    
+    var context = getContextInfo();
+    return context;
   `,
 
   /**
    * Create a text layer
    */
   createTextLayer: (text: string, x = 100, y = 100, fontSize = 24) => `
+    ${getContextInfo}
+    
     if (app.documents.length === 0) {
       throw new Error('No active document');
     }
@@ -71,7 +121,16 @@ export const ExtendScriptSnippets = {
     textLayer.textItem.contents = "${text.replace(/"/g, '\\"')}";
     textLayer.textItem.position = [${x}, ${y}];
     textLayer.textItem.size = ${fontSize};
-    return { name: textLayer.name };
+    
+    var result = {
+      created: true,
+      layerName: textLayer.name,
+      text: "${text.replace(/"/g, '\\"')}",
+      position: { x: ${x}, y: ${y} },
+      fontSize: ${fontSize},
+      context: getContextInfo()
+    };
+    return result;
   `,
 
   /**
@@ -79,6 +138,7 @@ export const ExtendScriptSnippets = {
    */
   placeImage: (filePath: string, x = 0, y = 0) => `
     ${helperFunctions}
+    ${getContextInfo}
     
     if (app.documents.length === 0) {
       throw new Error('No active document');
@@ -102,11 +162,18 @@ export const ExtendScriptSnippets = {
     executeAction(cTID('Plc '), desc, DialogModes.NO);
     
     var layer = app.activeDocument.activeLayer;
-    return { 
-      name: layer.name,
-      width: layer.bounds[2] - layer.bounds[0],
-      height: layer.bounds[3] - layer.bounds[1]
+    var result = { 
+      placed: true,
+      layerName: layer.name,
+      filePath: "${filePath}",
+      position: { x: ${x}, y: ${y} },
+      layerBounds: {
+        width: layer.bounds[2].as('px') - layer.bounds[0].as('px'),
+        height: layer.bounds[3].as('px') - layer.bounds[1].as('px')
+      },
+      context: getContextInfo()
     };
+    return result;
   `,
 
   /**
@@ -189,13 +256,21 @@ export const ExtendScriptSnippets = {
    * Create a new layer
    */
   newLayer: (name?: string) => `
+    ${getContextInfo}
+    
     if (app.documents.length === 0) {
       throw new Error('No active document');
     }
     var doc = app.activeDocument;
     var layer = doc.artLayers.add();
     ${name ? `layer.name = "${name.replace(/"/g, '\\"')}";` : ''}
-    return { name: layer.name };
+    
+    var result = { 
+      created: true,
+      layerName: layer.name,
+      context: getContextInfo()
+    };
+    return result;
   `,
 
   /**
@@ -253,15 +328,30 @@ export const ExtendScriptSnippets = {
    * Get all layer names
    */
   getLayerNames: () => `
+    ${getContextInfo}
+    
     if (app.documents.length === 0) {
       throw new Error('No active document');
     }
     var doc = app.activeDocument;
-    var names = [];
+    var layers = [];
     for (var i = 0; i < doc.layers.length; i++) {
-      names.push(doc.layers[i].name);
+      var layer = doc.layers[i];
+      layers.push({
+        name: layer.name,
+        kind: String(layer.kind),
+        visible: layer.visible,
+        opacity: layer.opacity,
+        blendMode: String(layer.blendMode)
+      });
     }
-    return names;
+    
+    var result = {
+      layerCount: layers.length,
+      layers: layers,
+      context: getContextInfo()
+    };
+    return result;
   `,
 
   /**
@@ -285,6 +375,8 @@ export const ExtendScriptSnippets = {
    * Scale active layer to fit document (maintain aspect ratio)
    */
   fitLayerToDocument: (fillDocument = false) => `
+    ${getContextInfo}
+    
     if (app.documents.length === 0) {
       throw new Error('No active document');
     }
@@ -328,15 +420,19 @@ export const ExtendScriptSnippets = {
       canvasHeight / 2 - (bounds[1].as('px') + layerHeight / 2)
     );
     
-    return {
+    var result = {
+      fitted: true,
+      mode: ${fillDocument} ? 'fill' : 'fit',
       originalSize: { width: layerWidth, height: layerHeight },
       newSize: { 
         width: layerWidth * scaleFactor, 
         height: layerHeight * scaleFactor 
       },
       scaleFactor: scaleFactor,
-      scalePercent: scalePercent
+      scalePercent: scalePercent,
+      context: getContextInfo()
     };
+    return result;
   `,
 
   /**
@@ -411,6 +507,8 @@ export const ExtendScriptSnippets = {
    * Set layer opacity
    */
   setLayerOpacity: (opacity: number) => `
+    ${getContextInfo}
+    
     if (app.documents.length === 0) {
       throw new Error('No active document');
     }
@@ -419,15 +517,22 @@ export const ExtendScriptSnippets = {
     
     layer.opacity = ${opacity};
     
-    return { 
-      opacity: layer.opacity
+    var result = { 
+      updated: true,
+      property: 'opacity',
+      value: layer.opacity,
+      layerName: layer.name,
+      context: getContextInfo()
     };
+    return result;
   `,
 
   /**
    * Set layer blend mode
    */
   setLayerBlendMode: (blendMode: string) => `
+    ${getContextInfo}
+    
     if (app.documents.length === 0) {
       throw new Error('No active document');
     }
@@ -436,9 +541,14 @@ export const ExtendScriptSnippets = {
     
     layer.blendMode = BlendMode.${blendMode};
     
-    return { 
-      blendMode: String(layer.blendMode)
+    var result = { 
+      updated: true,
+      property: 'blendMode',
+      value: String(layer.blendMode),
+      layerName: layer.name,
+      context: getContextInfo()
     };
+    return result;
   `,
 
   /**
@@ -549,14 +659,18 @@ export const ExtendScriptSnippets = {
    * Apply Gaussian Blur filter
    */
   applyGaussianBlur: (radius: number) => `
+    ${getContextInfo}
+    
     if (app.documents.length === 0) {
       throw new Error('No active document');
     }
     var layer = app.activeDocument.activeLayer;
+    var wasRasterized = false;
     
     // Auto-rasterize if needed
     if (layer.kind === LayerKind.TEXT || layer.kind === LayerKind.SMARTOBJECT) {
       layer.rasterize(RasterizeType.ENTIRELAYER);
+      wasRasterized = true;
     }
     
     if (layer.kind !== LayerKind.NORMAL) {
@@ -565,10 +679,14 @@ export const ExtendScriptSnippets = {
     
     layer.applyGaussianBlur(${radius});
     
-    return { 
+    var result = { 
+      applied: true,
       filter: 'Gaussian Blur',
-      radius: ${radius}
+      radius: ${radius},
+      wasRasterized: wasRasterized,
+      context: getContextInfo()
     };
+    return result;
   `,
 
   /**
@@ -1057,6 +1175,312 @@ export const ExtendScriptSnippets = {
       originalKind: originalKind,
       newKind: 'NORMAL'
     };
+  `,
+
+  /**
+   * Undo last operation (step backward in history)
+   */
+  undo: (steps = 1) => `
+    ${getContextInfo}
+    
+    if (app.documents.length === 0) {
+      throw new Error('No active document');
+    }
+    var doc = app.activeDocument;
+    
+    // Get current history state index
+    var currentIndex = -1;
+    for (var i = 0; i < doc.historyStates.length; i++) {
+      if (doc.historyStates[i] === doc.activeHistoryState) {
+        currentIndex = i;
+        break;
+      }
+    }
+    
+    if (currentIndex === -1) {
+      throw new Error('Could not find current history state');
+    }
+    
+    // Calculate target index
+    var targetIndex = Math.max(0, currentIndex - ${steps});
+    
+    // Set active history state to go back
+    if (targetIndex < doc.historyStates.length) {
+      doc.activeHistoryState = doc.historyStates[targetIndex];
+    }
+    
+    var result = {
+      undone: true,
+      steps: currentIndex - targetIndex,
+      currentHistoryState: doc.activeHistoryState.name,
+      remainingStates: currentIndex - targetIndex,
+      context: getContextInfo()
+    };
+    return result;
+  `,
+
+  /**
+   * Redo operation (step forward in history)
+   */
+  redo: (steps = 1) => `
+    ${getContextInfo}
+    
+    if (app.documents.length === 0) {
+      throw new Error('No active document');
+    }
+    var doc = app.activeDocument;
+    
+    // Get current history state index
+    var currentIndex = -1;
+    for (var i = 0; i < doc.historyStates.length; i++) {
+      if (doc.historyStates[i] === doc.activeHistoryState) {
+        currentIndex = i;
+        break;
+      }
+    }
+    
+    if (currentIndex === -1) {
+      throw new Error('Could not find current history state');
+    }
+    
+    // Calculate target index
+    var targetIndex = Math.min(doc.historyStates.length - 1, currentIndex + ${steps});
+    
+    // Set active history state to go forward
+    if (targetIndex >= 0) {
+      doc.activeHistoryState = doc.historyStates[targetIndex];
+    }
+    
+    var result = {
+      redone: true,
+      steps: targetIndex - currentIndex,
+      currentHistoryState: doc.activeHistoryState.name,
+      availableRedoSteps: doc.historyStates.length - 1 - targetIndex,
+      context: getContextInfo()
+    };
+    return result;
+  `,
+
+  /**
+   * Get history states
+   */
+  getHistoryStates: () => `
+    ${getContextInfo}
+    
+    if (app.documents.length === 0) {
+      throw new Error('No active document');
+    }
+    var doc = app.activeDocument;
+    
+    var states = [];
+    var currentIndex = -1;
+    
+    for (var i = 0; i < doc.historyStates.length; i++) {
+      var state = doc.historyStates[i];
+      states.push({
+        name: state.name,
+        snapshot: state.snapshot || false
+      });
+      
+      if (state === doc.activeHistoryState) {
+        currentIndex = i;
+      }
+    }
+    
+    var result = {
+      totalStates: states.length,
+      currentIndex: currentIndex,
+      currentState: currentIndex >= 0 ? states[currentIndex].name : 'Unknown',
+      canUndo: currentIndex > 0,
+      canRedo: currentIndex < states.length - 1,
+      states: states,
+      context: getContextInfo()
+    };
+    return result;
+  `,
+
+  /**
+   * Move layer to specific position (reorder)
+   */
+  moveLayerToPosition: (targetLayerName: string, position: string) => `
+    ${getContextInfo}
+    
+    if (app.documents.length === 0) {
+      throw new Error('No active document');
+    }
+    var doc = app.activeDocument;
+    var activeLayer = doc.activeLayer;
+    
+    // Find target layer
+    var targetLayer = null;
+    for (var i = 0; i < doc.layers.length; i++) {
+      if (doc.layers[i].name === "${targetLayerName.replace(/"/g, '\\"')}") {
+        targetLayer = doc.layers[i];
+        break;
+      }
+    }
+    
+    if (!targetLayer) {
+      throw new Error('Target layer not found: ${targetLayerName}');
+    }
+    
+    // Determine ElementPlacement
+    var placement;
+    if ("${position}" === "ABOVE") {
+      placement = ElementPlacement.PLACEBEFORE;
+    } else if ("${position}" === "BELOW") {
+      placement = ElementPlacement.PLACEAFTER;
+    } else if ("${position}" === "TOP") {
+      placement = ElementPlacement.PLACEATBEGINNING;
+    } else if ("${position}" === "BOTTOM") {
+      placement = ElementPlacement.PLACEATEND;
+    } else {
+      throw new Error('Invalid position. Use: ABOVE, BELOW, TOP, or BOTTOM');
+    }
+    
+    // Move the layer
+    activeLayer.move(targetLayer, placement);
+    
+    var result = {
+      moved: true,
+      layerName: activeLayer.name,
+      position: "${position}",
+      relativeTo: targetLayer.name,
+      context: getContextInfo()
+    };
+    return result;
+  `,
+
+  /**
+   * Move layer to top of layer stack
+   */
+  moveLayerToTop: () => `
+    ${getContextInfo}
+    
+    if (app.documents.length === 0) {
+      throw new Error('No active document');
+    }
+    var doc = app.activeDocument;
+    var layer = doc.activeLayer;
+    
+    if (doc.layers.length > 0) {
+      layer.move(doc.layers[0], ElementPlacement.PLACEBEFORE);
+    }
+    
+    var result = {
+      moved: true,
+      layerName: layer.name,
+      position: 'top',
+      context: getContextInfo()
+    };
+    return result;
+  `,
+
+  /**
+   * Move layer to bottom of layer stack
+   */
+  moveLayerToBottom: () => `
+    ${getContextInfo}
+    
+    if (app.documents.length === 0) {
+      throw new Error('No active document');
+    }
+    var doc = app.activeDocument;
+    var layer = doc.activeLayer;
+    
+    if (doc.layers.length > 0) {
+      layer.move(doc.layers[doc.layers.length - 1], ElementPlacement.PLACEAFTER);
+    }
+    
+    var result = {
+      moved: true,
+      layerName: layer.name,
+      position: 'bottom',
+      context: getContextInfo()
+    };
+    return result;
+  `,
+
+  /**
+   * Move layer up one position
+   */
+  moveLayerUp: () => `
+    ${getContextInfo}
+    
+    if (app.documents.length === 0) {
+      throw new Error('No active document');
+    }
+    var doc = app.activeDocument;
+    var layer = doc.activeLayer;
+    
+    // Find current layer index
+    var currentIndex = -1;
+    for (var i = 0; i < doc.layers.length; i++) {
+      if (doc.layers[i] === layer) {
+        currentIndex = i;
+        break;
+      }
+    }
+    
+    if (currentIndex <= 0) {
+      return {
+        moved: false,
+        message: 'Layer is already at the top',
+        context: getContextInfo()
+      };
+    }
+    
+    // Move before the layer above
+    layer.move(doc.layers[currentIndex - 1], ElementPlacement.PLACEBEFORE);
+    
+    var result = {
+      moved: true,
+      layerName: layer.name,
+      direction: 'up',
+      context: getContextInfo()
+    };
+    return result;
+  `,
+
+  /**
+   * Move layer down one position
+   */
+  moveLayerDown: () => `
+    ${getContextInfo}
+    
+    if (app.documents.length === 0) {
+      throw new Error('No active document');
+    }
+    var doc = app.activeDocument;
+    var layer = doc.activeLayer;
+    
+    // Find current layer index
+    var currentIndex = -1;
+    for (var i = 0; i < doc.layers.length; i++) {
+      if (doc.layers[i] === layer) {
+        currentIndex = i;
+        break;
+      }
+    }
+    
+    if (currentIndex === -1 || currentIndex >= doc.layers.length - 1) {
+      return {
+        moved: false,
+        message: 'Layer is already at the bottom',
+        context: getContextInfo()
+      };
+    }
+    
+    // Move after the layer below
+    layer.move(doc.layers[currentIndex + 1], ElementPlacement.PLACEAFTER);
+    
+    var result = {
+      moved: true,
+      layerName: layer.name,
+      direction: 'down',
+      context: getContextInfo()
+    };
+    return result;
   `,
 };
 

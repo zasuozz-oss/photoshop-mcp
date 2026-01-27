@@ -18,6 +18,8 @@ import { createAdjustmentTools } from '../tools/adjustment-tools.js';
 import { createTextTools } from '../tools/text-tools.js';
 import { createSelectionTools } from '../tools/selection-tools.js';
 import { createActionTools } from '../tools/action-tools.js';
+import { createHistoryTools } from '../tools/history-tools.js';
+import { createLayerOrderingTools } from '../tools/layer-ordering-tools.js';
 
 export class PhotoshopMCPServer {
   private server: Server;
@@ -127,6 +129,16 @@ export class PhotoshopMCPServer {
 
     const actionTools = createActionTools(connection);
     actionTools.forEach((tool) => {
+      this.toolRegistry.register(tool.tool.name, tool);
+    });
+
+    const historyTools = createHistoryTools(connection);
+    historyTools.forEach((tool) => {
+      this.toolRegistry.register(tool.tool.name, tool);
+    });
+
+    const layerOrderingTools = createLayerOrderingTools(connection);
+    layerOrderingTools.forEach((tool) => {
       this.toolRegistry.register(tool.tool.name, tool);
     });
 

@@ -7,7 +7,7 @@
 
 A Model Context Protocol (MCP) server that enables AI assistants like Claude and Cursor to control Adobe Photoshop programmatically. This allows you to create designs, manipulate images, and automate Photoshop workflows through natural language commands while working in your IDE.
 
-> **🎨 42+ Tools** | **🖥️ Cross-Platform** | **📦 NPX Ready** | **🔧 ExtendScript API**
+> **🎨 50+ Tools** | **🖥️ Cross-Platform** | **📦 NPX Ready** | **🔧 ExtendScript API** | **⏮️ Undo/Redo**
 
 ## Features
 
@@ -24,8 +24,10 @@ A Model Context Protocol (MCP) server that enables AI assistants like Claude and
 - ✅ **Filters**: Gaussian Blur, Sharpen, Noise, Motion Blur
 - ✅ **Color Adjustments**: Brightness/Contrast, Hue/Saturation, Auto Levels/Contrast
 - ✅ **Selections & Masks**: Rectangular selections, layer masks
+- ✅ **History Control**: Undo/Redo operations, view history states
 - ✅ **Actions**: Play recorded actions, execute custom scripts
 - ✅ **Auto-Rasterize**: Automatically converts layers when needed for filters
+- ✅ **Context Tracking**: Returns document/layer state after each operation for AI context awareness
 - ✅ **NPX Support**: Easy execution via npx without installation
 
 ## Installation
@@ -322,6 +324,55 @@ Rasterize the active layer (convert text/smart object to normal layer).
 ```javascript
 // Example: Rasterize layer
 photoshop_rasterize_layer()
+```
+
+### Layer Ordering
+
+#### `photoshop_move_layer_to_position`
+Move the active layer relative to another layer.
+
+**Parameters:**
+- `targetLayerName` (string, required): Name of the reference layer
+- `position` (string, required): ABOVE, BELOW, TOP, or BOTTOM
+
+```javascript
+// Example: Move layer above "Background"
+photoshop_move_layer_to_position({
+  targetLayerName: "Background",
+  position: "ABOVE"
+})
+```
+
+#### `photoshop_move_layer_to_top`
+Move the active layer to the top of the layer stack.
+
+```javascript
+// Example: Move to top
+photoshop_move_layer_to_top()
+```
+
+#### `photoshop_move_layer_to_bottom`
+Move the active layer to the bottom of the layer stack.
+
+```javascript
+// Example: Move to bottom
+photoshop_move_layer_to_bottom()
+```
+
+#### `photoshop_move_layer_up`
+Move the active layer up one position.
+
+```javascript
+// Example: Move up
+photoshop_move_layer_up()
+```
+
+#### `photoshop_move_layer_down`
+Move the active layer down one position.
+
+```javascript
+// Example: Move down
+photoshop_move_layer_down()
 ```
 
 ### Layer Transformations
@@ -631,6 +682,44 @@ Apply (merge) the layer mask to the layer.
 photoshop_apply_layer_mask()
 ```
 
+### History & Undo/Redo
+
+#### `photoshop_undo`
+Undo the last operation(s) - equivalent to Ctrl/Cmd+Z.
+
+**Parameters:**
+- `steps` (number, optional): Number of steps to undo (default: 1)
+
+```javascript
+// Example: Undo last operation
+photoshop_undo()
+
+// Example: Undo last 3 operations
+photoshop_undo({ steps: 3 })
+```
+
+#### `photoshop_redo`
+Redo previously undone operation(s) - equivalent to Ctrl/Cmd+Shift+Z.
+
+**Parameters:**
+- `steps` (number, optional): Number of steps to redo (default: 1)
+
+```javascript
+// Example: Redo last undone operation
+photoshop_redo()
+
+// Example: Redo last 2 undone operations
+photoshop_redo({ steps: 2 })
+```
+
+#### `photoshop_get_history`
+Get the history states of the active document.
+
+```javascript
+// Example: View history
+photoshop_get_history()
+```
+
 ### Actions & Automation
 
 #### `photoshop_play_action`
@@ -886,6 +975,26 @@ alert('Processing started!');
 
 </details>
 
+<details>
+<summary>⏮️ Undo/Redo Operations</summary>
+
+```
+Apply Gaussian blur 15px to the active layer.
+[Wait for result]
+Actually, that's too much blur. Undo that.
+Apply Gaussian blur 5px instead.
+```
+
+Or:
+
+```
+Get the history states to see what operations were performed.
+Undo the last 3 operations.
+Redo 1 step to bring back one operation.
+```
+
+</details>
+
 ---
 
 ## Usage Examples
@@ -989,6 +1098,56 @@ photoshop_save_document({
   format: "PSD"
 })
 ```
+
+## Context Tracking
+
+Each tool returns comprehensive context information about the current state of Photoshop, including:
+
+- **Document Info**: Name, dimensions, resolution, color mode, layer count
+- **Active Layer Info**: Name, type, opacity, blend mode, visibility, lock state
+- **Selection State**: Whether a selection is active
+- **Operation Result**: Specific details about what was changed
+
+This allows AI assistants to maintain awareness of:
+- Which document is active
+- Which layer is being worked on
+- Current layer properties (opacity, blend mode, etc.)
+- Document dimensions and settings
+
+**Example Response:**
+```javascript
+{
+  "applied": true,
+  "filter": "Gaussian Blur",
+  "radius": 10,
+  "wasRasterized": true,
+  "context": {
+    "hasDocument": true,
+    "document": {
+      "name": "design.psd",
+      "width": 1920,
+      "height": 1080,
+      "resolution": 72,
+      "colorMode": "RGBColorMode",
+      "layerCount": 3,
+      "hasSelection": false
+    },
+    "activeLayer": {
+      "name": "Background",
+      "kind": "NORMAL",
+      "opacity": 100,
+      "blendMode": "NORMAL",
+      "visible": true,
+      "locked": false,
+      "isBackground": false
+    }
+  }
+}
+```
+
+This context helps AI assistants remember what document and layer they're working on across multiple commands.
+
+---
 
 ## Platform-Specific Notes
 
