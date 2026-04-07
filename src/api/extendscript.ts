@@ -22,6 +22,13 @@ function getContextInfo() {
   
   if (context.hasDocument) {
     var doc = app.activeDocument;
+    var hasSel = false;
+    try {
+      if (doc.selection && doc.selection.bounds) {
+        hasSel = true;
+      }
+    } catch(e) {}
+    
     context.document = {
       name: doc.name,
       width: doc.width.as('px'),
@@ -29,7 +36,7 @@ function getContextInfo() {
       resolution: doc.resolution,
       colorMode: String(doc.mode),
       layerCount: doc.layers.length,
-      hasSelection: doc.selection.bounds ? true : false
+      hasSelection: hasSel
     };
     
     if (doc.activeLayer) {
